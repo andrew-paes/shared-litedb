@@ -14,6 +14,7 @@ namespace LiteDB.Windows.Service
         public string _fdb = @"Filename=D:\LiteDB\Shared.db";
         public Random _rnd = new Random();
         public object thisLock = new object();
+        private Thread mainProcessThread = null;
 
         private delegate void delegateForTaskInsert(int threadId);
 
@@ -35,11 +36,65 @@ namespace LiteDB.Windows.Service
         /// </summary>
         public void StartServer()
         {
+            mainProcessThread = new Thread(new ThreadStart(MainProcess));
+            mainProcessThread.Start();
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public void StopServer()
+        {
+            mainProcessThread.Join(1000); // Wait for one second for the the thread to stop.
+
+            // If still alive; Get rid of the thread.
+            if (mainProcessThread.IsAlive)
+            {
+                mainProcessThread.Abort();
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void Timer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
+        {
+            try
+            {
+                using (var db = new LiteDatabase(@"Filename=D:\LiteDB\Shared.db"))
+                {
+                    var col = db.GetCollection<State>("states");
+
+                    var context = new State { Name = "SÃO PAULO", Code = "SP" };
+
+                    col.Insert(context);
+
+                    //Thread.Sleep(2000);
+
+                    context.Name = "RIO GRANDE DO SUL";
+
+                    col.Update(context);
+
+                    col.EnsureIndex(x => x.Name); // Index document using a document property
+
+                    var result = col.Find(x => x.Name.StartsWith("RI")); // Simple Linq support
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+        }
+
+        private void MainProcess()
+        {
             //_timer.Elapsed += Timer_Elapsed;
             //_timer.Interval = 10000;
             //_timer.Enabled = true;
 
-            int totalThreads = 5000;
+            int totalThreads = 1000;
             bool flagJoin = false;
 
             using (var db = new LiteDatabase(_fdb)) // To create the file previously
@@ -128,48 +183,6 @@ namespace LiteDB.Windows.Service
             }
         }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        public void StopServer()
-        {
-
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void Timer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
-        {
-            try
-            {
-                using (var db = new LiteDatabase(@"Filename=D:\LiteDB\Shared.db"))
-                {
-                    var col = db.GetCollection<State>("states");
-
-                    var context = new State { Name = "SÃO PAULO", Code = "SP" };
-
-                    col.Insert(context);
-
-                    //Thread.Sleep(2000);
-
-                    context.Name = "RIO GRANDE DO SUL";
-
-                    col.Update(context);
-
-                    col.EnsureIndex(x => x.Name); // Index document using a document property
-
-                    var result = col.Find(x => x.Name.StartsWith("RI")); // Simple Linq support
-                }
-            }
-            catch (Exception ex)
-            {
-
-            }
-        }
-
         public void TaskInsert(object threadId)
         {
             //lock (thisLock)
@@ -183,9 +196,9 @@ namespace LiteDB.Windows.Service
 
                 try
                 {
-                    //Update Ini Thread Ini
                     Log logResult = new Log();
 
+                    //Find Thread
                     using (var db = new LiteDatabase(_fdb))
                     {
                         LiteCollection<Log> col = db.GetCollection<Log>("logs");
@@ -193,6 +206,7 @@ namespace LiteDB.Windows.Service
                         logResult = col.FindOne(x => x.Name.Equals(threadName));
                     }
 
+                    //Update Ini Thread Ini
                     using (var db = new LiteDatabase(_fdb))
                     {
                         if (logResult != null && logResult.Id > 0)
@@ -205,7 +219,7 @@ namespace LiteDB.Windows.Service
 
                             col.Update(logResult);
 
-                            logResult = new Log();
+                            //logResult = new Log();
                         }
                     }
 
@@ -231,14 +245,15 @@ namespace LiteDB.Windows.Service
                         var list = col.Find(x => x.Name.StartsWith(code));
                     }
 
+                    ////Find Thread
+                    //using (var db = new LiteDatabase(_fdb))
+                    //{
+                    //    LiteCollection<Log> col = db.GetCollection<Log>("logs");
+
+                    //    logResult = col.FindOne(x => x.Name.Equals(threadName));
+                    //}
+
                     //Update Thread End
-                    using (var db = new LiteDatabase(_fdb))
-                    {
-                        LiteCollection<Log> col = db.GetCollection<Log>("logs");
-
-                        logResult = col.FindOne(x => x.Name.Equals(threadName));
-                    }
-
                     using (var db = new LiteDatabase(_fdb))
                     {
                         if (logResult != null && logResult.Id > 0)
@@ -261,7 +276,7 @@ namespace LiteDB.Windows.Service
 
                             col.Update(logResult);
 
-                            logResult = new Log();
+                            //logResult = new Log();
                         }
                     }
                 }
